@@ -4,9 +4,13 @@
 * **Conference: NFM 2018**
 * Script type: Manuscript
 
+![Title Slide](slides/slide-0.png)
+
 Thank you and hi everyone.
 I'm going to give you an overview about a tool I named distb.
 It is an extension for ProB and distributes model checking work on multiple CPU cores or machines.
+
+![Model Checking Algorithm](slides/slide-1.png)
 
 I want to start with a basic explicit state model checking algorithm.
 That is what ProB is capable of - amongst other stuff like LTL or symbolic model checking.
@@ -22,6 +26,8 @@ Let's build a parallel model checker.
 We just start up some threads that work on the queue.
 If in doubt, we throw in some mutexes to avoid concurrency issues and we're done, right?
 
+![Requirements](slides/slide-2.png)
+
 For a distributed version, there are some requirements.
 Firstly, we do not want to check the same state over and over again.
 Otherwise, we don't get any faster if every worker does the entire work.
@@ -35,6 +41,8 @@ Lastly, we want to avoid network latency when possible.
 Retrieving information from other machines can take quite some time.
 The other end has to be ready and, additionally, we get the network delay.
 
+![What is special about B and ProB?](slides/slide-3.png)
+
 So let's break our parallel model checker again.
 ProB is written in Prolog.
 That means, no threads.
@@ -46,6 +54,8 @@ But that gives us some more time for distribution overhead.
 Finally, the models we are looking at have relatively few states, as long as they are finite.
 I claim that checking a billion states of a real world model has not been done.
 That's a number that SPIN laughs about.
+
+![Results](slides/slide-4.png)
 
 Let's take a look at the results first.
 It would be a pity if I was cut off without showing them to you first.
@@ -83,12 +93,16 @@ This model does not scale nearly as well, but we expected this.
 It was included for this exact reason.
 We understand that the state queue collapses on a regular basis back to one state, when there is only one possibility to move the largest disc.
 
+![Suitable Models](slides/slide-5.png)
+
 Okay, so when does a model actually benefit from distributed model checking?
 From our experience, we can get pretty good speed-ups as long as it is not a counter and as long as its state space is big enough.
 We require at least some degree of non-determinism, so fully sequential models can not benefit, instead they suffer the overhead from distribution.
 We also have no means to do any off-line partitioning of the state space.
 As we understand, SPIN can abuse some semantics about processes to do so for Promela models.
 But in order to get any reliable information about the state space, we have to explore it entirely.
+
+![Architecture](slides/slide-6.png)
 
 So here's how the magic work:
 since we got no threads, we just start multiple instances of ProB on each machine.
@@ -98,6 +112,8 @@ The workers are the only components that perform actual progress-oriented work.
 We also got proxies between the master and workers which intercept communication.
 I'll get to that in a minute.
 For now, just note that workers usually don't talk with the master directly, and neither with other workers.
+
+![ZeroMQ Zocket Types](slides/slide-7.png)
 
 The communication happens via ZeroMQ, which is a great framework for distributed messaging.
 If you ever want to link two processes, use that library.
@@ -114,6 +130,8 @@ They also translate or send new commands to the workers.
 Finally, workers can receive work via a reply-socket.
 So, when work items are transferred, it's a "can you please take this", and their request is acknowledged.
 
+![Communicating States](slides/slide-8.png)
+
 As I mentioned earlier, ProB is written in Prolog.
 So, all the messaging stuff and most logic is written in C.
 Passing a state to C from Prolog is quite a challenge.
@@ -123,6 +141,8 @@ We'll talk about hashes in a second.
 We use an undocumented library that is named fastrw, that's fast read/write.
 It avoids costly parsing, but it isn't really cheap either.
 However, it's still better than purely textual, human-readable representations.
+
+![Visited States](slides/slide-9.png)
 
 So, hashes.
 Each encountered state is hashed and these hashes are communicated.
@@ -140,6 +160,8 @@ That's actually bad.
 It's likely you get a collision once you exceed a few million states.
 Last I've heard, they prepared to switch the hash function for this exact reason.
 
+![Visited States: Data Structure](slides/slide-10.png)
+
 The reason we use a cryptographic hash function is the data structure that we use.
 It's called Hash Array Mapped Trie, and Trie is not a typo.
 Basically, it's a prefix tree plus storage of the hash code and value.
@@ -154,6 +176,8 @@ Usually, it's more memory-efficient than storing a hash map, since a good loadin
 The cryptographic hash function ensures that the hashes are about uniformly distributed, and, thus, the tree does not grow as much in height.
 For a million states, the maximum depth is less than 8, and we have never seen a depth higher than 10 in practice.
 
+![Work Sharing](slides/slide-11.png)
+
 Eventually, workers have to share their work queue with other workers.
 The first thing that comes to mind is that workers always communicate their queue sizes when they change.
 That's a bit heavy on the network.
@@ -163,6 +187,8 @@ This fingerprint is passed to the master since it usually does not change as oft
 The master then can decide when work transfers should happen between machines.
 Proxies are responsible for their own workers.
 Transfers on the same machine are always perferred over transfers between multiple machines.
+
+![Proxy](slides/slide-12.png)
 
 So that's one reason for a proxy.
 To be honest, it was introduced as a hack.
@@ -176,10 +202,14 @@ That hash trie we have seen resides in shared memory.
 Maintaining multiple copies would be a waste.
 Ensuring a consistent view is kinda nice.
 
+![Bandwidth Reduction](slides/slide-13.png)
+
 The proxy can reduce bandwidth consumption on the master even further.
 If we look at peer-to-peer streaming techniques, they use such an application-level multicast.
 Then, the master does not have to use its bandwidth for all participating machines but only for a small amount, say two.
 Each proxy publishes everything that comes in to another to proxies, if they are available.
+
+![Distributed Model Checking for B](slides/slide-14.png)
 
 To wrap it up, here's what I know about distributed model checkers for B.
 There's distb, I've told you about it.
@@ -191,6 +221,8 @@ I don't know whether there is anything else out there, but a survey on distribut
 I think there are many techniques that should be shared.
 I know of SPIN, DiVinE, PREACH and a few more, and they all got some great ideas.
 However, due to the differences in their input languages, a comparison is really hard.
+
+![Summary](slides/slide-15.png)
 
 Okay, I just said that, there are some interesting techniques that we can use.
 We got a mutable version of a functional data structure for visited states.
